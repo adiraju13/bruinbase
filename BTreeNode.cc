@@ -33,8 +33,9 @@ int BTLeafNode::getKeyCount()
  * @param rid[IN] the RecordId to insert
  * @return 0 if successful. Return an error code if the node is full.
  */
-RC BTLeafNode::insert(int key, const RecordId& rid)
-{ return 0; }
+RC BTLeafNode::insert(int key, const RecordId& rid){
+
+}
 
 /*
  * Insert the (key, rid) pair to the node
@@ -116,11 +117,8 @@ int BTNonLeafNode::getKeyCount() {
 	//Will be represented by the variable size
 	//Want to see how many of these pairs can fit in buffer
 	int size = sizeof(PageId) + sizeof(int);
-	int pageSize = PageFile::PAGE_SIZE;
-	//max number of pairs that can fit 
-	int max = (pageSize-sizeof(PageId))/size;
 
-	//Need to check the number of keys in this buffer
+	//Need to find the number of keys in this buffer
 
 	int numOfKeys = 0;
 	char* pointer = buffer + 8;
@@ -135,7 +133,7 @@ int BTNonLeafNode::getKeyCount() {
 			//We will return numOfKeys
 		}
 		numOfKeys = numOfKeys+1;
-		count = count + 8;
+		count = count + size;
 	}
 
 	return numOfKeys;
@@ -148,8 +146,53 @@ int BTNonLeafNode::getKeyCount() {
  * @param pid[IN] the PageId to insert
  * @return 0 if successful. Return an error code if the node is full.
  */
-RC BTNonLeafNode::insert(int key, PageId pid)
-{ return 0; }
+RC BTNonLeafNode::insert(int key, PageId pid){
+	//Each pair has a certain size
+	//Will be represented by the variable size
+	//Want to see how many of these pairs can fit in buffer
+	int size = sizeof(PageId) + sizeof(int);
+	int pageSize = PageFile::PAGE_SIZE;
+	//max number of pairs that can fit 
+	int max = (pageSize-sizeof(PageId))/size;
+
+	if(getKeyCount()+1 > max) {return RC_NODE_FULL;}
+
+	char* pointer = buffer+8;
+
+	int count=8;
+	int currKey;
+	while (count<1016) {
+		memcpy(&currKey,pointer,sizeof(int));
+		if(currKey>key || currKey==0) {break;}
+		count = count + size;
+	}
+
+	//After this loop
+	//We have found the specific place to insert
+	//Now we will be manipulating by copying data between the buffer and new buffer
+	//The new buffer will contain the inserted value
+
+	char* newBuffer[PageFile::PAGE_SIZE]; //Represents the new buffer
+
+	memcpy(newBuffer,buffer,count); //Will copy all values from buffer to new buffer till count
+	memcpy(newBuffer+count,&key,sizeof(int));
+	memcpy(newBuffer+count+sizeof(int),&pid,sizeof(PageId));
+
+	//The new value has been inserted
+	//Now we need to copy the rest of the buffer to newBuffer
+
+	//Non leaf nodes need to take in account for the 8 extra bytes
+
+	int extra = getKeyCount()*size - count + 8;
+
+	memcpy(newBuffer+count+size,buffer+count,extra);
+
+	//Insertion has completed and now we need to replace data of buffer w/new buffer
+
+	memcpy(buffer,newBuffer,pageSize);
+
+	free(newBuffer);
+}
 
 /*
  * Insert the (key, pid) pair to the node
