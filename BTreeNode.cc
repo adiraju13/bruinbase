@@ -8,8 +8,9 @@ using namespace std;
  * @param pf[IN] PageFile to read from
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTLeafNode::read(PageId pid, const PageFile& pf)
-{ return 0; }
+RC BTLeafNode::read(PageId pid, const PageFile& pf){
+	return pf.read(pid,buffer); //Using PageFile function to read from specific page
+}
     
 /*
  * Write the content of the node to the page pid in the PageFile pf.
@@ -17,8 +18,9 @@ RC BTLeafNode::read(PageId pid, const PageFile& pf)
  * @param pf[IN] PageFile to write to
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTLeafNode::write(PageId pid, PageFile& pf)
-{ return 0; }
+RC BTLeafNode::write(PageId pid, PageFile& pf){
+	return pf.write(pid,buffer); //Using PageFile function to write to specific page
+}
 
 /*
  * Return the number of keys stored in the node.
@@ -96,8 +98,9 @@ RC BTLeafNode::setNextNodePtr(PageId pid)
  * @param pf[IN] PageFile to read from
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTNonLeafNode::read(PageId pid, const PageFile& pf)
-{ return 0; }
+RC BTNonLeafNode::read(PageId pid, const PageFile& pf){
+	return pf.read(pid,buffer); //Using PageFile function to read from specific page
+}
     
 /*
  * Write the content of the node to the page pid in the PageFile pf.
@@ -105,8 +108,9 @@ RC BTNonLeafNode::read(PageId pid, const PageFile& pf)
  * @param pf[IN] PageFile to write to
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTNonLeafNode::write(PageId pid, PageFile& pf)
-{ return 0; }
+RC BTNonLeafNode::write(PageId pid, PageFile& pf){
+	return pf.write(pid,buffer); //Using PageFile function to write to specific page
+}
 
 /*
  * Return the number of keys stored in the node.
