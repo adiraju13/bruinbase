@@ -18,6 +18,8 @@
  */
 class BTLeafNode {
   public:
+    BTLeafNode();
+    void setNumKeys(int key);
    /**
     * Insert the (key, rid) pair to the node.
     * Remember that all keys inside a B+tree node should be kept sorted.
@@ -104,6 +106,10 @@ class BTLeafNode {
     * that contains the node.
     */
     char buffer[PageFile::PAGE_SIZE];
+    int size_of_element;
+    int size_of_pageID;
+    int size_of_page;
+    int numKeys;
 }; 
 
 
