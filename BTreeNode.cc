@@ -228,6 +228,13 @@ RC BTLeafNode::setNextNodePtr(PageId pid)
 	return 0;
 }
 
+/*************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+***************************************************************************/
+
 /*
  * Read the content of the node from the page pid in the PageFile pf.
  * @param pid[IN] the PageId to read
@@ -330,8 +337,12 @@ RC BTNonLeafNode::insert(int key, PageId pid){
 	//Insertion has completed and now we need to replace data of buffer w/new buffer
 
 	memcpy(buffer,newBuffer,pageSize);
-
 	free(newBuffer);
+
+	numKeys++;
+
+	RC retValue = 0;
+	return retValue;
 }
 
 /*
@@ -354,8 +365,38 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
  * @param pid[OUT] the pointer to the child node to follow.
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
-{ return 0; }
+RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid){
+	int size = sizeof(PageId) + sizeof(int);
+
+	char* pointer = buffer + 8;
+
+	//What we will be doing is looping until we find the 
+	//first child noe pointer to follow and output 
+	//it in the pid
+
+	int total = getKeyCount()*size+8;
+	int count = 8;
+	int curr_key;
+
+	while(count < total) {
+		memcpy(&curr_key,pointer,sizeof(int));
+		if(curr_key > searchKey && count==8) {
+			memcpy(&pid,buffer,sizeof(PageId));
+			return 0;
+		}
+		else if(curr_key > searchKey) {
+			memcpy(&pid,pointer - 4;sizeof(PageId));
+			return 0;
+		}
+		count = count + 8;
+	}
+	//If that doesn't work, then we know that the search key 
+	//is larger than the values of curr_key
+
+	memcpy(&pid,pointer-4,sizeof(PageId));
+	return 0;
+
+}
 
 /*
  * Initialize the root node with (pid1, key, pid2).
@@ -364,5 +405,16 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
  * @param pid2[IN] the PageId to insert behind the key
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTNonLeafNode::initializeRoot(PageId pid1, int key, PageId pid2)
-{ return 0; }
+RC BTNonLeafNode::initializeRoot(PageId pid1, int key, PageId pid2){
+	//What we want to do is insert the root node
+	//Inserting the first pair into the B+Tree
+
+	char* pointer = buffer;
+	memcpy(pointer,&pid1,sizeof(PageId));
+
+	RC retValue = insert(key,pid2);
+
+	if(retValue!=0) {return retValue;}
+
+	return 0;
+}
