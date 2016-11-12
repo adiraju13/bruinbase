@@ -19,6 +19,9 @@
 class BTLeafNode {
   public:
     BTLeafNode();
+    void printLeaf();
+    void printSize();
+    void printNextNodePtr();
     void setNumKeys(int key);
    /**
     * Insert the (key, rid) pair to the node.
