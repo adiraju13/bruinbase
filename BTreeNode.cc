@@ -293,30 +293,7 @@ RC BTNonLeafNode::write(PageId pid, PageFile& pf){
  * @return the number of keys in the node
  */
 int BTNonLeafNode::getKeyCount() {
-	//Each pair has a certain size
-	//Will be represented by the variable size
-	//Want to see how many of these pairs can fit in buffer
-	int size = sizeof(PageId) + sizeof(int);
-
-	//Need to find the number of keys in this buffer
-
-	int numOfKeys = 0;
-	char* pointer = buffer + 8;
-
-	int count = 8;
-	int currKey;
-	while (count < 1016) {
-		memcpy(&currKey,pointer,sizeof(int)); 
-		if(currKey==0){
-			break; 
-			//Means this is where it ends 
-			//We will return numOfKeys
-		}
-		numOfKeys = numOfKeys+1;
-		count = count + size;
-	}
-
-	return numOfKeys;
+	return numKeys;
 }
 
 
