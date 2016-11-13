@@ -4,99 +4,193 @@
  * Public License (GPL).
  *
  * @author Junghoo "John" Cho <cho AT cs.ucla.edu>
- * @date 3/24/2008
+ * @date 5/28/2008
  */
 
-#ifndef BTREEINDEX_H
-#define BTREEINDEX_H
+#ifndef BTREENODE_H
+#define BTREENODE_H
 
-#include "Bruinbase.h"
-#include "PageFile.h"
 #include "RecordFile.h"
-             
-/**
- * The data structure to point to a particular entry at a b+tree leaf node.
- * An IndexCursor consists of pid (PageId of the leaf node) and 
- * eid (the location of the index entry inside the node).
- * IndexCursor is used for index lookup and traversal.
- */
-typedef struct {
-  // PageId of the index entry
-  PageId  pid;  
-  // The entry number inside the node
-  int     eid;  
-} IndexCursor;
+#include "PageFile.h"
 
 /**
- * Implements a B-Tree index for bruinbase.
- * 
+ * BTLeafNode: The class representing a B+tree leaf node.
  */
-class BTreeIndex {
- public:
-  BTreeIndex();
+class BTLeafNode {
+  public:
+    BTLeafNode();
+    void setNumKeys(int key);
+   /**
+    * Insert the (key, rid) pair to the node.
+    * Remember that all keys inside a B+tree node should be kept sorted.
+    * @param key[IN] the key to insert
+    * @param rid[IN] the RecordId to insert
+    * @return 0 if successful. Return an error code if the node is full.
+    */
+    RC insert(int key, const RecordId& rid);
 
-  /**
-   * Open the index file in read or write mode.
-   * Under 'w' mode, the index file should be created if it does not exist.
-   * @param indexname[IN] the name of the index file
-   * @param mode[IN] 'r' for read, 'w' for write
-   * @return error code. 0 if no error
-   */
-  RC open(const std::string& indexname, char mode);
+   /**
+    * Insert the (key, rid) pair to the node
+    * and split the node half and half with sibling.
+    * The first key of the sibling node is returned in siblingKey.
+    * Remember that all keys inside a B+tree node should be kept sorted.
+    * @param key[IN] the key to insert.
+    * @param rid[IN] the RecordId to insert.
+    * @param sibling[IN] the sibling node to split with. This node MUST be EMPTY when this function is called.
+    * @param siblingKey[OUT] the first key in the sibling node after split.
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC insertAndSplit(int key, const RecordId& rid, BTLeafNode& sibling, int& siblingKey);
 
-  /**
-   * Close the index file.
-   * @return error code. 0 if no error
-   */
-  RC close();
+   /**
+    * If searchKey exists in the node, set eid to the index entry
+    * with searchKey and return 0. If not, set eid to the index entry
+    * immediately after the largest index key that is smaller than searchKey, 
+    * and return the error code RC_NO_SUCH_RECORD.
+    * Remember that keys inside a B+tree node are always kept sorted.
+    * @param searchKey[IN] the key to search for.
+    * @param eid[OUT] the index entry number with searchKey or immediately
+                      behind the largest key smaller than searchKey.
+    * @return 0 if searchKey is found. If not, RC_NO_SEARCH_RECORD.
+    */
+    RC locate(int searchKey, int& eid);
+
+   /**
+    * Read the (key, rid) pair from the eid entry.
+    * @param eid[IN] the entry number to read the (key, rid) pair from
+    * @param key[OUT] the key from the slot
+    * @param rid[OUT] the RecordId from the slot
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC readEntry(int eid, int& key, RecordId& rid);
+
+   /**
+    * Return the pid of the next slibling node.
+    * @return the PageId of the next sibling node 
+    */
+    PageId getNextNodePtr();
+
+
+   /**
+    * Set the next slibling node PageId.
+    * @param pid[IN] the PageId of the next sibling node 
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC setNextNodePtr(PageId pid);
+
+   /**
+    * Return the number of keys stored in the node.
+    * @return the number of keys in the node
+    */
+    int getKeyCount();
+ 
+   /**
+    * Read the content of the node from the page pid in the PageFile pf.
+    * @param pid[IN] the PageId to read
+    * @param pf[IN] PageFile to read from
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC read(PageId pid, const PageFile& pf);
     
-  /**
-   * Insert (key, RecordId) pair to the index.
-   * @param key[IN] the key for the value inserted into the index
-   * @param rid[IN] the RecordId for the record being inserted into the index
-   * @return error code. 0 if no error
-   */
-  RC insert(int key, const RecordId& rid);
+   /**
+    * Write the content of the node to the page pid in the PageFile pf.
+    * @param pid[IN] the PageId to write to
+    * @param pf[IN] PageFile to write to
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC write(PageId pid, PageFile& pf);
 
-  /**
-   * Run the standard B+Tree key search algorithm and identify the
-   * leaf node where searchKey may exist. If an index entry with
-   * searchKey exists in the leaf node, set IndexCursor to its location 
-   * (i.e., IndexCursor.pid = PageId of the leaf node, and
-   * IndexCursor.eid = the searchKey index entry number.) and return 0. 
-   * If not, set IndexCursor.pid = PageId of the leaf node and 
-   * IndexCursor.eid = the index entry immediately after the largest 
-   * index key that is smaller than searchKey, and return the error 
-   * code RC_NO_SUCH_RECORD.
-   * Using the returned "IndexCursor", you will have to call readForward()
-   * to retrieve the actual (key, rid) pair from the index.
-   * @param key[IN] the key to find
-   * @param cursor[OUT] the cursor pointing to the index entry with 
-   *                    searchKey or immediately behind the largest key 
-   *                    smaller than searchKey.
-   * @return 0 if searchKey is found. Othewise, an error code
-   */
-  RC locate(int searchKey, IndexCursor& cursor);
+  private:
+   /**
+    * The main memory buffer for loading the content of the disk page 
+    * that contains the node.
+    */
+    char buffer[PageFile::PAGE_SIZE];
+    int size_of_element;
+    int size_of_pageID;
+    int size_of_page;
+    int numKeys;
+}; 
 
-  /**
-   * Read the (key, rid) pair at the location specified by the index cursor,
-   * and move foward the cursor to the next entry.
-   * @param cursor[IN/OUT] the cursor pointing to an leaf-node index entry in the b+tree
-   * @param key[OUT] the key stored at the index cursor location
-   * @param rid[OUT] the RecordId stored at the index cursor location
-   * @return error code. 0 if no error
-   */
-  RC readForward(IndexCursor& cursor, int& key, RecordId& rid);
-  
- private:
-  PageFile pf;         /// the PageFile used to store the actual b+tree in disk
 
-  PageId   rootPid;    /// the PageId of the root node
-  int      treeHeight; /// the height of the tree
-  /// Note that the content of the above two variables will be gone when
-  /// this class is destructed. Make sure to store the values of the two 
-  /// variables in disk, so that they can be reconstructed when the index
-  /// is opened again later.
-};
+/**
+ * BTNonLeafNode: The class representing a B+tree nonleaf node.
+ */
+class BTNonLeafNode {
+  public:
+    BTNonLeafNode();
+    void printLeaf();
+   /**
+    * Insert a (key, pid) pair to the node.
+    * Remember that all keys inside a B+tree node should be kept sorted.
+    * @param key[IN] the key to insert
+    * @param pid[IN] the PageId to insert
+    * @return 0 if successful. Return an error code if the node is full.
+    */
+    RC insert(int key, PageId pid);
 
-#endif /* BTREEINDEX_H */
+   /**
+    * Insert the (key, pid) pair to the node
+    * and split the node half and half with sibling.
+    * The sibling node MUST be empty when this function is called.
+    * The middle key after the split is returned in midKey.
+    * Remember that all keys inside a B+tree node should be kept sorted.
+    * @param key[IN] the key to insert
+    * @param pid[IN] the PageId to insert
+    * @param sibling[IN] the sibling node to split with. This node MUST be empty when this function is called.
+    * @param midKey[OUT] the key in the middle after the split. This key should be inserted to the parent node.
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, int& midKey);
+
+   /**
+    * Given the searchKey, find the child-node pointer to follow and
+    * output it in pid.
+    * Remember that the keys inside a B+tree node are sorted.
+    * @param searchKey[IN] the searchKey that is being looked up.
+    * @param pid[OUT] the pointer to the child node to follow.
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC locateChildPtr(int searchKey, PageId& pid);
+
+   /**
+    * Initialize the root node with (pid1, key, pid2).
+    * @param pid1[IN] the first PageId to insert
+    * @param key[IN] the key that should be inserted between the two PageIds
+    * @param pid2[IN] the PageId to insert behind the key
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC initializeRoot(PageId pid1, int key, PageId pid2);
+
+   /**
+    * Return the number of keys stored in the node.
+    * @return the number of keys in the node
+    */
+    int getKeyCount();
+
+   /**
+    * Read the content of the node from the page pid in the PageFile pf.
+    * @param pid[IN] the PageId to read
+    * @param pf[IN] PageFile to read from
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC read(PageId pid, const PageFile& pf);
+    
+   /**
+    * Write the content of the node to the page pid in the PageFile pf.
+    * @param pid[IN] the PageId to write to
+    * @param pf[IN] PageFile to write to
+    * @return 0 if successful. Return an error code if there is an error.
+    */
+    RC write(PageId pid, PageFile& pf);
+
+  private:
+   /**
+    * The main memory buffer for loading the content of the disk page 
+    * that contains the node.
+    */
+    char buffer[PageFile::PAGE_SIZE];
+    int numKeys;
+}; 
+
+#endif /* BTREENODE_H */

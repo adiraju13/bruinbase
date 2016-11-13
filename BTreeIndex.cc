@@ -1,89 +1,471 @@
-/*
- * Copyright (C) 2008 by The Regents of the University of California
- * Redistribution of this file is permitted under the terms of the GNU
- * Public License (GPL).
- *
- * @author Junghoo "John" Cho <cho AT cs.ucla.edu>
- * @date 3/24/2008
- */
- 
-#include "BTreeIndex.h"
 #include "BTreeNode.h"
+#include <cstring>
+#include <stdlib.h>
+#include <iostream>
 
 using namespace std;
 
-/*
- * BTreeIndex constructor
- */
-BTreeIndex::BTreeIndex()
+BTLeafNode::BTLeafNode()
 {
-    rootPid = -1;
+	//define some constants that will be used to run through the leaf
+	size_of_element = sizeof(int) + sizeof(RecordId);
+	size_of_pageID = sizeof(PageId);
+	size_of_page = PageFile::PAGE_SIZE;
+	numKeys = 0;
+
+	//set buffer to 0s
+	memset(buffer, 0, size_of_page);
+}
+
+void BTLeafNode::setNumKeys(int nKeys)
+{
+	numKeys = nKeys;
 }
 
 /*
- * Open the index file in read or write mode.
- * Under 'w' mode, the index file should be created if it does not exist.
- * @param indexname[IN] the name of the index file
- * @param mode[IN] 'r' for read, 'w' for write
- * @return error code. 0 if no error
+ * Read the content of the node from the page pid in the PageFile pf.
+ * @param pid[IN] the PageId to read
+ * @param pf[IN] PageFile to read from
+ * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTreeIndex::open(const string& indexname, char mode)
+RC BTLeafNode::read(PageId pid, const PageFile& pf)
 {
-    return 0;
+	//using PageFile API to read the page into the buffer
+	return pf.read(pid, buffer); 
+}
+/*
+ * Write the content of the node to the page pid in the PageFile pf.
+ * @param pid[IN] the PageId to write to
+ * @param pf[IN] PageFile to write to
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+
+RC BTLeafNode::write(PageId pid, PageFile& pf)
+{	
+	//using the PageFile to write into the page from the buffer 
+	return pf.write(pid, buffer); 
 }
 
 /*
- * Close the index file.
- * @return error code. 0 if no error
+ * Return the number of keys stored in the node.
+ * @return the number of keys in the node
  */
-RC BTreeIndex::close()
+int BTLeafNode::getKeyCount()
 {
-    return 0;
+	return numKeys;
 }
 
 /*
- * Insert (key, RecordId) pair to the index.
- * @param key[IN] the key for the value inserted into the index
- * @param rid[IN] the RecordId for the record being inserted into the index
- * @return error code. 0 if no error
+ * Insert a (key, rid) pair to the node.
+ * @param key[IN] the key to insert
+ * @param rid[IN] the RecordId to insert
+ * @return 0 if successful. Return an error code if the node is full.
  */
-RC BTreeIndex::insert(int key, const RecordId& rid)
-{
-    return 0;
+RC BTLeafNode::insert(int key, const RecordId& rid){
+	//check if there is space for the node?
+	if (size_of_page - size_of_pageID - (numKeys * size_of_element) < size_of_element){
+		return RC_NODE_FULL;
+	}
+
+	int byteOffset = 0;
+	for (int i = 0; i < numKeys; i++){
+		int currKeyValue;
+		memcpy(&currKeyValue, buffer + byteOffset, sizeof(int));
+		if (currKeyValue > key){
+			break;
+		}
+		byteOffset += size_of_element;
+	}
+
+	//create temp set of memory for the new buffer
+	char temp_buffer[size_of_page];
+
+	//add stuff from buffer that stays the same
+	memcpy(temp_buffer, buffer, byteOffset);
+	memcpy(temp_buffer + byteOffset, &key, sizeof(int));
+	memcpy(temp_buffer + byteOffset + sizeof(int), &rid, sizeof(RecordId));
+	memcpy(temp_buffer + byteOffset + size_of_element, buffer + byteOffset, size_of_page-byteOffset);
+
+	//now recopy the temp buffer back into the buffer:
+	memcpy(buffer, temp_buffer, size_of_page);
+
+	numKeys++;
+	return 0;
+}
+
+/*
+ * Insert the (key, rid) pair to the node
+ * and split the node half and half with sibling.
+ * The first key of the sibling node is returned in siblingKey.
+ * @param key[IN] the key to insert.
+ * @param rid[IN] the RecordId to insert.
+ * @param sibling[IN] the sibling node to split with. This node MUST be EMPTY when this function is called.
+ * @param siblingKey[OUT] the first key in the sibling node after split.
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTLeafNode::insertAndSplit(int key, const RecordId& rid, 
+                              BTLeafNode& sibling, int& siblingKey)
+{ 
+	//sibling has stuff in it
+	if (sibling.getKeyCount() != 0)
+		return RC_INVALID_ATTRIBUTE;
+
+	//space to put the node
+	if (size_of_page - size_of_pageID - (numKeys * size_of_element) >= size_of_element){
+		return RC_INVALID_ATTRIBUTE;
+	}
+
+	PageId currNextPage = getNextNodePtr();
+
+	int index;
+	locate(key, index);
+	int numKeysInFirst;
+	int numKeysInSecond;
+	bool insertFirstHalf = false;
+
+	if (index >= numKeys/2){
+		insertFirstHalf = false;
+		numKeysInFirst = index + 1;
+	}else{
+		insertFirstHalf = true;
+		numKeysInFirst = index;
+	}
+	numKeysInSecond = numKeys - numKeysInFirst;
+
+	//zero out sibling buffer:
+	memset(sibling.buffer, 0, size_of_page);
+
+	//split the current buffer
+	memcpy(sibling.buffer, buffer + (numKeysInFirst * size_of_element), numKeysInSecond * size_of_element);
+	memset(buffer + (numKeysInFirst * size_of_element), 0, (numKeysInSecond * size_of_element) - sizeof(PageId));
+
+	setNumKeys(numKeysInFirst);
+	sibling.setNumKeys(numKeysInSecond);
+
+	sibling.setNextNodePtr(currNextPage);
+
+	if (insertFirstHalf){
+		insert(key, rid);
+	}
+	else{
+		sibling.insert(key, rid);
+	}
+
+	return 0; 
 }
 
 /**
- * Run the standard B+Tree key search algorithm and identify the
- * leaf node where searchKey may exist. If an index entry with
- * searchKey exists in the leaf node, set IndexCursor to its location
- * (i.e., IndexCursor.pid = PageId of the leaf node, and
- * IndexCursor.eid = the searchKey index entry number.) and return 0.
- * If not, set IndexCursor.pid = PageId of the leaf node and
- * IndexCursor.eid = the index entry immediately after the largest
- * index key that is smaller than searchKey, and return the error
- * code RC_NO_SUCH_RECORD.
- * Using the returned "IndexCursor", you will have to call readForward()
- * to retrieve the actual (key, rid) pair from the index.
- * @param key[IN] the key to find
- * @param cursor[OUT] the cursor pointing to the index entry with
- *                    searchKey or immediately behind the largest key
- *                    smaller than searchKey.
- * @return 0 if searchKey is found. Othewise an error code
+ * If searchKey exists in the node, set eid to the index entry
+ * with searchKey and return 0. If not, set eid to the index entry
+ * immediately after the largest index key that is smaller than searchKey,
+ * and return the error code RC_NO_SUCH_RECORD.
+ * Remember that keys inside a B+tree node are always kept sorted.
+ * @param searchKey[IN] the key to search for.
+ * @param eid[OUT] the index entry number with searchKey or immediately
+                   behind the largest key smaller than searchKey.
+ * @return 0 if searchKey is found. Otherwise return an error code.
  */
-RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
-{
-    return 0;
+RC BTLeafNode::locate(int searchKey, int& eid)
+{	
+	if (numKeys == 0){
+		eid = 0;
+		return RC_NO_SUCH_RECORD;
+	} 
+	int leafKey = 0;
+	for (int i = 0; i < numKeys; i++){
+		memcpy(&leafKey, buffer + (i*size_of_element), sizeof(int));
+		if (leafKey == searchKey){
+			eid = i;
+			return 0;
+		}
+		else if (leafKey > searchKey){
+			eid = i;
+			return RC_NO_SUCH_RECORD;
+		}
+	}
+	eid = numKeys;
+	return RC_NO_SUCH_RECORD; 
 }
 
 /*
- * Read the (key, rid) pair at the location specified by the index cursor,
- * and move foward the cursor to the next entry.
- * @param cursor[IN/OUT] the cursor pointing to an leaf-node index entry in the b+tree
- * @param key[OUT] the key stored at the index cursor location.
- * @param rid[OUT] the RecordId stored at the index cursor location.
- * @return error code. 0 if no error
+ * Read the (key, rid) pair from the eid entry.
+ * @param eid[IN] the entry number to read the (key, rid) pair from
+ * @param key[OUT] the key from the entry
+ * @param rid[OUT] the RecordId from the entry
+ * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid)
-{
-    return 0;
+RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
+{ 
+	if (eid < 0 || eid >= numKeys){
+		return RC_NO_SUCH_RECORD;
+	}
+	memcpy(&key, buffer + (eid * size_of_element), sizeof(int));
+	memcpy(&rid, buffer+ (eid * size_of_element) + sizeof(int), sizeof(RecordId));
+	return 0; 
+}
+
+/*
+ * Return the pid of the next slibling node.
+ * @return the PageId of the next sibling node 
+ */
+PageId BTLeafNode::getNextNodePtr()
+{ 
+	PageId pid;
+	memcpy (&pid, buffer + (size_of_page - size_of_pageID), size_of_pageID);
+	return pid; 
+}
+
+/*
+ * Set the pid of the next slibling node.
+ * @param pid[IN] the PageId of the next sibling node 
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTLeafNode::setNextNodePtr(PageId pid)
+{  
+	if (pid < 0)
+		return RC_INVALID_PID;
+
+	memcpy(buffer + size_of_page - size_of_pageID, &pid, size_of_pageID);
+	return 0;
+}
+
+/*************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+***************************************************************************/
+
+BTNonLeafNode::BTNonLeafNode() {
+	numKeys=0;
+}
+
+
+/*
+ * Read the content of the node from the page pid in the PageFile pf.
+ * @param pid[IN] the PageId to read
+ * @param pf[IN] PageFile to read from
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTNonLeafNode::read(PageId pid, const PageFile& pf){
+	return pf.read(pid,buffer); //Using PageFile function to read from specific page
+}
+    
+/*
+ * Write the content of the node to the page pid in the PageFile pf.
+ * @param pid[IN] the PageId to write to
+ * @param pf[IN] PageFile to write to
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTNonLeafNode::write(PageId pid, PageFile& pf){
+	return pf.write(pid,buffer); //Using PageFile function to write to specific page
+}
+
+/*
+ * Return the number of keys stored in the node.
+ * @return the number of keys in the node
+ */
+int BTNonLeafNode::getKeyCount() {
+	//Each pair has a certain size
+	//Will be represented by the variable size
+	//Want to see how many of these pairs can fit in buffer
+	int size = sizeof(PageId) + sizeof(int);
+	//cout << "The value of size is = " << size << endl;
+
+	//cout << "Inside getKeyCount" << endl;
+
+	//Need to find the number of keys in this buffer
+
+	int numOfKeys = 0;
+	char* pointer = buffer + 8;
+
+	int t = 8;
+	int currKey;
+	while (t < 1016) {
+		memcpy(&currKey,pointer,sizeof(int)); 
+		//cout << "value of t - " << t << endl;
+		//cout << "The value of count = " << t << endl;
+		//cout << "The value of currKey = " << currKey << endl;
+		if(currKey==0){
+			break; 
+			//Means this is where it ends 
+			//We will return numOfKeys
+		}
+		pointer = pointer + size;
+		numOfKeys = numOfKeys+1;
+		t = t + size;
+		//cout << "The value of count after incrementation is : " << t << endl;
+	}
+
+	return numOfKeys;
+}
+
+
+/*
+ * Insert a (key, pid) pair to the node.
+ * @param key[IN] the key to insert
+ * @param pid[IN] the PageId to insert
+ * @return 0 if successful. Return an error code if the node is full.
+ */
+RC BTNonLeafNode::insert(int key, PageId pid){
+	//Each pair has a certain size
+	//Will be represented by the variable size
+	//Want to see how many of these pairs can fit in buffer
+	int size = sizeof(PageId) + sizeof(int);
+	int pageSize = PageFile::PAGE_SIZE;
+	//max number of pairs that can fit 
+	int max = (pageSize-sizeof(PageId))/size;
+	int currTotal = getKeyCount();
+
+	//cout << "The value of currTotal - " << currTotal << endl;
+
+	if(currTotal+1 > max) {return RC_NODE_FULL;}
+
+	char* pointer = buffer+8;
+
+	int count=8;
+	int currKey;
+	while (count<1016) {
+		memcpy(&currKey,pointer,sizeof(int));
+		//cout << "The value of currKey - " << currKey << endl;
+		if(currKey>key || currKey==0) {break;}
+		count = count + size;
+		pointer = pointer + size; //pointer moves smh 
+	}
+
+	//After this loop
+	//We have found the specific place to insert
+	//Now we will be manipulating by copying data between the buffer and new buffer
+	//The new buffer will contain the inserted value
+
+	//char* newBuffer[pageSize]; //Represents the new buffer
+	char* newBuffer = (char*)malloc(pageSize);
+
+	memcpy(newBuffer,buffer,count); //Will copy all values from buffer to new buffer till count
+	memcpy(newBuffer+count,&key,sizeof(int));
+	memcpy(newBuffer+count+sizeof(int),&pid,sizeof(PageId));
+
+	//The new value has been inserted
+	//Now we need to copy the rest of the buffer to newBuffer
+
+	//Non leaf nodes need to take in account for the 8 extra bytes
+
+	int extra = getKeyCount()*size - count + 8;
+
+	memcpy(newBuffer+count+size,buffer+count,extra);
+
+	//Insertion has completed and now we need to replace data of buffer w/new buffer
+
+	memcpy(buffer,newBuffer,pageSize);
+	free(newBuffer);
+
+	//cout << "The value of buffer is - " << buffer << endl;
+
+	numKeys++;
+
+	//cout << "Insertion successful" << endl;
+
+	RC retValue = 0;
+	return retValue;
+}
+
+/*
+ * Insert the (key, pid) pair to the node
+ * and split the node half and half with sibling.
+ * The middle key after the split is returned in midKey.
+ * @param key[IN] the key to insert
+ * @param pid[IN] the PageId to insert
+ * @param sibling[IN] the sibling node to split with. This node MUST be empty when this function is called.
+ * @param midKey[OUT] the key in the middle after the split. This key should be inserted to the parent node.
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, int& midKey)
+{ return 0; }
+
+/*
+ * Given the searchKey, find the child-node pointer to follow and
+ * output it in pid.
+ * @param searchKey[IN] the searchKey that is being looked up.
+ * @param pid[OUT] the pointer to the child node to follow.
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid){
+	int size = sizeof(PageId) + sizeof(int);
+
+	char* pointer = buffer + 8;
+
+	//What we will be doing is looping until we find the 
+	//first child noe pointer to follow and output 
+	//it in the pid
+
+	int total = getKeyCount()*size+8;
+	int count = 8;
+	int curr_key;
+
+	while(count < total) {
+		memcpy(&curr_key,pointer,sizeof(int));
+		if(curr_key > searchKey && count==8) {
+			memcpy(&pid,buffer,sizeof(PageId));
+			return 0;
+		}
+		else if(curr_key > searchKey) {
+			memcpy(&pid,pointer - 4,sizeof(PageId));
+			return 0;
+		}
+		count = count + 8;
+	}
+	//If that doesn't work, then we know that the search key 
+	//is larger than the values of curr_key
+
+	memcpy(&pid,pointer-4,sizeof(PageId));
+	return 0;
+}
+
+/*
+ * Initialize the root node with (pid1, key, pid2).
+ * @param pid1[IN] the first PageId to insert
+ * @param key[IN] the key that should be inserted between the two PageIds
+ * @param pid2[IN] the PageId to insert behind the key
+ * @return 0 if successful. Return an error code if there is an error.
+ */
+RC BTNonLeafNode::initializeRoot(PageId pid1, int key, PageId pid2){
+	//What we want to do is insert the root node
+	//Inserting the first pair into the B+Tree
+
+	char* pointer = buffer;
+	memcpy(pointer,&pid1,sizeof(PageId));
+
+	RC retValue = insert(key,pid2);
+
+	//cout << "The retValue of insertion is : " << retValue << endl;
+
+	if(retValue!=0) {return retValue;}
+
+	return 0;
+}
+
+
+void BTNonLeafNode::printLeaf(){
+//This is the size in bytes of an entry pair
+	int pairSize = sizeof(PageId) + sizeof(int);
+	
+	//Skip the first 8 offset bytes, since there's no key there
+	char* temp = buffer+8;
+
+	cout << "getKeyCount() = " << getKeyCount() << endl;
+	cout << "pairSize = " << pairSize << endl;
+	cout << "getKeyCount()*pairSize+8 = " << getKeyCount()*pairSize+8 << endl;
+	
+	for(int i=8; i<getKeyCount()*pairSize+8; i+=pairSize)
+	{
+		int insideKey;
+		memcpy(&insideKey, temp, sizeof(int)); //Save the current key inside buffer as insideKey
+
+		cout << "insideKey = " << insideKey << endl;
+		
+		//Otherwise, searchKey is greater than or equal to insideKey, so we keep checking
+		temp += pairSize; //Jump temp over to the next key
+	}
+	
+//	cout << "" << endl;	
 }
