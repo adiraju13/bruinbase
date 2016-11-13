@@ -266,40 +266,8 @@ RC BTNonLeafNode::write(PageId pid, PageFile& pf){
  * @return the number of keys in the node
  */
 int BTNonLeafNode::getKeyCount() {
-	//Each pair has a certain size
-	//Will be represented by the variable size
-	//Want to see how many of these pairs can fit in buffer
-	int size = sizeof(PageId) + sizeof(int);
-	//cout << "The value of size is = " << size << endl;
-
-	//cout << "Inside getKeyCount" << endl;
-
-	//Need to find the number of keys in this buffer
-
-	int numOfKeys = 0;
-	char* pointer = buffer + 8;
-
-	int t = 8;
-	int currKey;
-	while (t < 1016) {
-		memcpy(&currKey,pointer,sizeof(int)); 
-		//cout << "value of t - " << t << endl;
-		//cout << "The value of count = " << t << endl;
-		//cout << "The value of currKey = " << currKey << endl;
-		if(currKey==0){
-			break; 
-			//Means this is where it ends 
-			//We will return numOfKeys
-		}
-		pointer = pointer + size;
-		numOfKeys = numOfKeys+1;
-		t = t + size;
-		//cout << "The value of count after incrementation is : " << t << endl;
-	}
-
-	return numOfKeys;
+	return numKeys;
 }
-
 
 /*
  * Insert a (key, pid) pair to the node.
@@ -328,7 +296,7 @@ RC BTNonLeafNode::insert(int key, PageId pid){
 	while (count<1016) {
 		memcpy(&currKey,pointer,sizeof(int));
 		//cout << "The value of currKey - " << currKey << endl;
-		if(currKey>key || currKey==0) {break;}
+		if(currKey==0 || currKey>key) {break;}
 		count = count + size;
 		pointer = pointer + size; //pointer moves smh 
 	}
@@ -379,8 +347,73 @@ RC BTNonLeafNode::insert(int key, PageId pid){
  * @param midKey[OUT] the key in the middle after the split. This key should be inserted to the parent node.
  * @return 0 if successful. Return an error code if there is an error.
  */
-RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, int& midKey)
-{ return 0; }
+RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, int& midKey){
+	int size = sizeof(PageId) + sizeof(int);
+	int pageSize = PageFile::PAGE_SIZE;
+	//max number of pairs that can fit 
+	int max = (pageSize-sizeof(PageId))/size;
+
+	if(!(getKeyCount()>=max)){return RC_INVALID_ATTRIBUTE;}
+	if(sibling.getKeyCount()!=0) {return RC_INVALID_ATTRIBUTE;}
+
+	//Need to split the current node 
+	//So we can compare shit, and figure out where the
+	//Marker node should be and accordingly, update the structure of the tree
+
+	int half = ((int)((getKeyCount()+1)/2)); //Not this represents the keys for the first half
+
+	//Now that we have the half, we need to find the SPECIFIC index value
+
+	int indexToSplit = half*size + 8;
+
+	//Next, is to find where we will be exactly splitting from
+	//We'll compare the last key of the first half, and first key of the second half
+
+	int lastKeyFirstHalf = 0;
+	int firstKeySecondHalf = 0;
+
+	//Get the values for the keys so the comparison shit can start
+
+	memcpy(&lastKeyFirstHalf,buffer+indexToSplit-8,sizeof(int));
+	memcpy(&firstKeySecondHalf,buffer+indexToSplit,sizeof(int));
+
+	if(key < lastKeyFirstHalf) { //Get all to the right of half and store into the new sibling buffer
+		memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
+		sibling.numKeys = getKeyCount()-half; //Will update the # of keys
+		memcpy(&midKey,buffer+indexToSplit-8,sizeof(int));
+		memcpy(sibling.buffer,buffer+indexToSplit-4,sizeof(int));
+
+		//Now that we,ve moved things we need to clear the second half of the 
+		//Current buffer
+
+		std::fill(buffer+indexToSplit-8,buffer+pageSize,0);
+		numKeys = half-1;
+		insert(key,pid);
+	}
+
+	else if(key > firstKeySecondHalf) {
+		memcpy(sibling.buffer+8,buffer+indexToSplit+8,pageSize-indexToSplit-8);
+		sibling.numKeys = getKeyCount()-half-1;
+
+		memcpy(&midKey,buffer+indexToSplit,sizeof(int));
+		memcpy(sibling.buffer,buffer+indexToSplit+4,sizeof(PageId));
+
+		std::fill(buffer+indexToSplit,buffer+pageSize,0);
+		numKeys=half;
+		sibling.insert(key,pid);
+	}
+
+	else {
+		memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-indexToSplit);
+		sibling.numKeys=getKeyCount()-half;
+		std::fill(buffer+indexToSplit,buffer+pageSize,0);
+		numKeys=half;
+		midKey=key;
+		memcpy(sibling.buffer,&pid,sizeof(PageId));
+	}
+
+	return 0;
+}
 
 /*
  * Given the searchKey, find the child-node pointer to follow and
