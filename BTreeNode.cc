@@ -295,7 +295,6 @@ RC BTNonLeafNode::insert(int key, PageId pid){
 	int currKey;
 	for (int i = 0; i < getKeyCount(); i++){
 		memcpy(&currKey,pointer,sizeof(int));
-		cout <<"curryKey: " << currKey << endl;
 		if(currKey==0 || currKey>key) {break;}
 		pointer = pointer + size; //pointer moves smh 
 		count += size;
@@ -379,7 +378,6 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 
 	if(key < lastKeyFirstHalf) { //Get all to the right of half and store into the new sibling buffer
 
-		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
 		for (int i = 0; i < getKeyCount() - half; i++){
@@ -388,7 +386,6 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 			sibling.insert(keyToInsert, pidToInsert);
 
 		}
-		//sibling.numKeys = getKeyCount()-half; //Will update the # of keys
 		memcpy(&midKey,buffer+indexToSplit-8,sizeof(int));
 		memcpy(sibling.buffer,buffer+indexToSplit-4,sizeof(PageId));
 
@@ -402,8 +399,7 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	}
 
 	else if(key > firstKeySecondHalf) {
-		//memcpy(sibling.buffer+8,buffer+indexToSplit+8,pageSize-indexToSplit-8);
-		//sibling.numKeys = getKeyCount()-half-1;
+
 
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
@@ -422,9 +418,7 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	}
 
 	else {
-		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-indexToSplit);
-		//sibling.numKeys=getKeyCount()-half;
-		
+
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
 		for (int i = 0; i < getKeyCount() - half; i++){
