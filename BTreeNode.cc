@@ -293,12 +293,12 @@ RC BTNonLeafNode::insert(int key, PageId pid){
 
 	int count=8;
 	int currKey;
-	while (count<1016) {
+	for (int i = 0; i < getKeyCount(); i++){
 		memcpy(&currKey,pointer,sizeof(int));
-		//cout << "The value of currKey - " << currKey << endl;
+		cout <<"curryKey: " << currKey << endl;
 		if(currKey==0 || currKey>key) {break;}
-		count = count + size;
 		pointer = pointer + size; //pointer moves smh 
+		count += size;
 	}
 
 	//After this loop
@@ -382,10 +382,11 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
-		for (int i = 0; i < getKeyCount - half; i++){
+		for (int i = 0; i < getKeyCount() - half; i++){
 			memcpy(&keyToInsert, buffer + indexToSplit + (i*size), sizeof(int));
 			memcpy(&pidToInsert, buffer + indexToSplit + (i*size) + sizeof(int), sizeof(PageId));
 			sibling.insert(keyToInsert, pidToInsert);
+
 		}
 		//sibling.numKeys = getKeyCount()-half; //Will update the # of keys
 		memcpy(&midKey,buffer+indexToSplit-8,sizeof(int));
@@ -426,7 +427,7 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 		
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
-		for (int i = 0; i < getKeyCount - half; i++){
+		for (int i = 0; i < getKeyCount() - half; i++){
 			memcpy(&keyToInsert, buffer + indexToSplit + (i*size), sizeof(int));
 			memcpy(&pidToInsert, buffer + indexToSplit + (i*size) + sizeof(int), sizeof(PageId));
 			sibling.insert(keyToInsert, pidToInsert);
@@ -501,30 +502,4 @@ RC BTNonLeafNode::initializeRoot(PageId pid1, int key, PageId pid2){
 	if(retValue!=0) {return retValue;}
 
 	return 0;
-}
-
-
-void BTNonLeafNode::printLeaf(){
-//This is the size in bytes of an entry pair
-	int pairSize = sizeof(PageId) + sizeof(int);
-	
-	//Skip the first 8 offset bytes, since there's no key there
-	char* temp = buffer+8;
-
-	cout << "getKeyCount() = " << getKeyCount() << endl;
-	cout << "pairSize = " << pairSize << endl;
-	cout << "getKeyCount()*pairSize+8 = " << getKeyCount()*pairSize+8 << endl;
-	
-	for(int i=8; i<getKeyCount()*pairSize+8; i+=pairSize)
-	{
-		int insideKey;
-		memcpy(&insideKey, temp, sizeof(int)); //Save the current key inside buffer as insideKey
-
-		cout << "insideKey = " << insideKey << endl;
-		
-		//Otherwise, searchKey is greater than or equal to insideKey, so we keep checking
-		temp += pairSize; //Jump temp over to the next key
-	}
-	
-//	cout << "" << endl;	
 }
