@@ -378,10 +378,19 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	memcpy(&firstKeySecondHalf,buffer+indexToSplit,sizeof(int));
 
 	if(key < lastKeyFirstHalf) { //Get all to the right of half and store into the new sibling buffer
-		memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
-		sibling.numKeys = getKeyCount()-half; //Will update the # of keys
+
+		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
+		int keyToInsert = 0;
+		PageId pidToInsert = 0;
+		for (int i = 0; i < getKeyCount - half; i++){
+			memcpy(&keyToInsert, buffer + indexToSplit + (i*size), sizeof(int));
+			memcpy(&pidToInsert, buffer + indexToSplit + (i*size) + sizeof(int), sizeof(PageId));
+			sibling.insert(keyToInsert, pidToInsert);
+		}
+		//sibling.numKeys = getKeyCount()-half; //Will update the # of keys
 		memcpy(&midKey,buffer+indexToSplit-8,sizeof(int));
-		memcpy(sibling.buffer,buffer+indexToSplit-4,sizeof(int));
+		memcpy(sibling.buffer,buffer+indexToSplit-4,sizeof(PageId));
+
 
 		//Now that we,ve moved things we need to clear the second half of the 
 		//Current buffer
@@ -392,8 +401,16 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	}
 
 	else if(key > firstKeySecondHalf) {
-		memcpy(sibling.buffer+8,buffer+indexToSplit+8,pageSize-indexToSplit-8);
-		sibling.numKeys = getKeyCount()-half-1;
+		//memcpy(sibling.buffer+8,buffer+indexToSplit+8,pageSize-indexToSplit-8);
+		//sibling.numKeys = getKeyCount()-half-1;
+
+		int keyToInsert = 0;
+		PageId pidToInsert = 0;
+		for (int i = 0; i < getKeyCount() - half - 1; i++){
+			memcpy(&keyToInsert, buffer+indexToSplit+8+(i*size), sizeof(int));
+			memcpy(&pidToInsert, buffer+indexToSplit+8+(i*size) + sizeof(int), sizeof(PageId));
+			sibling.insert(keyToInsert, pidToInsert);
+		}
 
 		memcpy(&midKey,buffer+indexToSplit,sizeof(int));
 		memcpy(sibling.buffer,buffer+indexToSplit+4,sizeof(PageId));
@@ -404,8 +421,17 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	}
 
 	else {
-		memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-indexToSplit);
-		sibling.numKeys=getKeyCount()-half;
+		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-indexToSplit);
+		//sibling.numKeys=getKeyCount()-half;
+		
+		int keyToInsert = 0;
+		PageId pidToInsert = 0;
+		for (int i = 0; i < getKeyCount - half; i++){
+			memcpy(&keyToInsert, buffer + indexToSplit + (i*size), sizeof(int));
+			memcpy(&pidToInsert, buffer + indexToSplit + (i*size) + sizeof(int), sizeof(PageId));
+			sibling.insert(keyToInsert, pidToInsert);
+		}
+
 		std::fill(buffer+indexToSplit,buffer+pageSize,0);
 		numKeys=half;
 		midKey=key;
