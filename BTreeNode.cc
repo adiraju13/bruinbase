@@ -382,7 +382,7 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-half);
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
-		for (int i = 0; i < getKeyCount - half; i++){
+		for (int i = 0; i < getKeyCount() - half; i++){
 			memcpy(&keyToInsert, buffer + indexToSplit + (i*size), sizeof(int));
 			memcpy(&pidToInsert, buffer + indexToSplit + (i*size) + sizeof(int), sizeof(PageId));
 			sibling.insert(keyToInsert, pidToInsert);
@@ -423,7 +423,7 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	else {
 		//memcpy(sibling.buffer+8,buffer+indexToSplit,pageSize-indexToSplit);
 		//sibling.numKeys=getKeyCount()-half;
-		
+
 		int keyToInsert = 0;
 		PageId pidToInsert = 0;
 		for (int i = 0; i < getKeyCount - half; i++){
