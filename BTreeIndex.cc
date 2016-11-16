@@ -52,9 +52,9 @@ RC BTreeIndex::open(const string& indexname, char mode){
  * Close the index file.
  * @return error code. 0 if no error
  */
-RC BTreeIndex::close()
-{
-    return 0;
+RC BTreeIndex::close(){
+	rootPid = RC_INVALID_PID;
+	return pf.close();
 }
 
 /*
