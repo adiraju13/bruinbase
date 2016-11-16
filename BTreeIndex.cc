@@ -27,9 +27,25 @@ BTreeIndex::BTreeIndex()
  * @param mode[IN] 'r' for read, 'w' for write
  * @return error code. 0 if no error
  */
-RC BTreeIndex::open(const string& indexname, char mode)
-{
-    return 0;
+RC BTreeIndex::open(const string& indexname, char mode){
+	RC val = pf.open(indexname,mode); //opens a file in read or write mode
+
+	if(val!=0)  { //Check to see if the file did not open successfully
+		rootPid = RC_INVALID_PID;
+		return val;
+	}
+
+	//if the file openned successfully, we set the rootPid to zero
+
+	rootPid = 0; 
+ 	
+ 	//Write an empty root node (which is a leaf node)
+	if(pf.endPid() <= 0) { 
+		BTLeafNode leaf;
+		int t = lead.write(rootPid,pf);
+	}
+
+	return 0;
 }
 
 /*
