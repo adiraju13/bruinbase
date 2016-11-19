@@ -18,6 +18,7 @@ using namespace std;
 BTreeIndex::BTreeIndex()
 {
     rootPid = -1;
+    treeHeight = 0;
 }
 
 /*
@@ -49,7 +50,132 @@ RC BTreeIndex::close()
  */
 RC BTreeIndex::insert(int key, const RecordId& rid)
 {
-    return 0;
+	// if nothing has been added
+	if (treeHeight == 0)
+	{
+		RC err;
+		BTLeafNode firstAdd;
+
+		err = firstAdd.insert(key, rid);
+
+		if (err != 0){
+			return err;
+		}
+
+		rootPid = pf.endPid();
+
+		treeHeight++;
+		return firstAdd.write(rootPid, pf);
+	}
+
+	int keyLocator = -100;
+	PageId pageLocator = -100;
+
+    return insertHelper(key, rid, 1, rootPid, keyLocator, pageLocator);
+}
+RC BTreeIndex::insertHelper(int key, const RecordId& rid, int level, PageId currPage, int& keyLocator, PageId &pageLocator){
+	if (level == treeHeight)
+	{
+		BTLeafNode leafToInsert;
+		RC err;
+		err = leafToInsert.read(currPage, pf);
+		if (err != 0) return err;
+
+		//no split necessary
+		err = leafToInsert.insert(key, rid);
+		if (err == 0){
+			leafToInsert.write(currPage, pf);
+			return 0;
+		}
+
+		//split necessary
+		BTLeafNode neighbor;
+		int nextKey;
+		err = leafToInsert.insertAndSplit(key, rid, neighbor, nextKey);
+		if (err != 0) return err;
+
+		PageId pidPointer = pf.endPid();
+
+		err = leafToInsert.setNextNodePtr(pidPointer);
+		if (err != 0) return err;
+
+		keyLocator = nextKey;
+		pageLocator = pidPointer;
+
+		err = leafToInsert.write(currPage, pf);
+		if (err != 0) return err;
+
+		err = neighbor.write(pidPointer, pf);
+		if (err != 0) return err;
+
+		if (level == 1){
+			BTNonLeafNode root;
+
+			int err;
+			err = root.initializeRoot(currPage, nextKey, pidPointer);
+			if (err != 0)return err;
+
+			rootPid = pf.endPid();
+			err = root.write(rootPid, pf);
+			if (err != 0)return err;
+
+			treeHeight++;
+
+		}
+		return 0;
+	}
+	else{
+
+		BTNonLeafNode nodeToSearch;
+		RC err;
+		err = nodeToSearch.read(currPage, pf);
+		if (err != 0){
+			return err;
+		}
+
+		PageId childId;
+		err = nodeToSearch.locateChildPtr(key, childId);
+		if (err != 0)
+			return err;
+
+		err = insertHelper(key, rid, level + 1, childId, keyLocator, pageLocator);
+		// need to insert into the non leaf
+		if (err == 0 && (keyLocator != -100 && pageLocator != -100)){
+			err = nodeToSearch.insert(keyLocator, pageLocator);
+			if (err == 0){
+				nodeToSearch.write(currPage, pf);
+				return 0;
+			}
+
+			BTNonLeafNode second;
+			int midKey;
+
+			err = nodeToSearch.insertAndSplit(key, currPage, second, midKey);
+			if (err != 0)return err;
+
+			int pidPointer = pf.endPid();
+			err = nodeToSearch.write(currPage, pf);
+			if (err != 0)return err;
+
+			err = second.write(pidPointer, pf);
+			if (err != 0) return err;
+
+			if (level == 1){
+
+				BTNonLeafNode root;
+				err = root.initializeRoot(currPage, midKey, pidPointer);
+
+				if (err != 0)return err;
+
+				rootPid = pf.endPid();
+				root.write(rootPid, pf);
+				treeHeight++;
+
+			}
+
+		}
+
+	}
 }
 
 /**
@@ -72,7 +198,46 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
  */
 RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
 {
-    return 0;
+	RC err;
+	if (treeHeight == 0){
+		return RC_NO_SUCH_RECORD;
+	}
+	else{
+		//follow root pid to the root and go from there -> recursive function
+		err = locateHelper(searchKey, cursor, 1, rootPid);
+	}
+    return err;
+}
+RC BTreeIndex::locateHelper(int searchKey, IndexCursor &cursor, int level, PageId pid_looper)
+{
+	if (level == treeHeight){
+		BTLeafNode searchNode;
+
+		int err;
+		err = searchNode.read(pid_looper, pf);
+		if (err != 0) return err;
+
+		int eid_found;
+		err = searchNode.locate(searchKey, eid_found);
+
+		if (err != 0) return err;
+
+		cursor.pid = pid_looper;
+		cursor.eid = eid_found;
+		return 0;
+	}
+	else{
+		BTNonLeafNode searchNode;
+		int err;
+		err = searchNode.read(pid_looper, pf);
+		if (err != 0) return err;
+
+		int new_pid;
+		err = searchNode.locateChildPtr(searchKey, new_pid);
+		if (err != 0) return err;
+
+		return locateHelper(searchKey, cursor, level + 1, new_pid);
+	}
 }
 
 /*

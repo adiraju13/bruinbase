@@ -200,7 +200,7 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 		return RC_NO_SUCH_RECORD;
 	}
 	memcpy(&key, buffer + (eid * size_of_element), sizeof(int));
-	memcpy(&rid, buffer+ (eid * size_of_element) + sizeof(int), sizeof(RecordId));
+	memcpy(&rid, buffer + (eid * size_of_element) + sizeof(int), sizeof(RecordId));
 	return 0; 
 }
 
@@ -471,7 +471,7 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid){
 	//If that doesn't work, then we know that the search key 
 	//is larger than the values of curr_key
 
-	memcpy(&pid,pointer-4,sizeof(PageId));
+	memcpy(&pid, pointer-4, sizeof(PageId));
 	return 0;
 }
 

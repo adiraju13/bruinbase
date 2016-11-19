@@ -97,6 +97,8 @@ class BTreeIndex {
   /// this class is destructed. Make sure to store the values of the two 
   /// variables in disk, so that they can be reconstructed when the index
   /// is opened again later.
+  RC insertHelper(int key, const RecordId& rid, int level, PageId currPage, int& keyLocator, PageId &pageLocator);
+  RC locateHelper(int searchKey, IndexCursor &cursor, int level, PageId pid_looper);
 };
 
 #endif /* BTREEINDEX_H */
