@@ -264,7 +264,38 @@ RC BTreeIndex::locateHelper(int searchKey, IndexCursor &cursor, int level, PageI
  * @param rid[OUT] the RecordId stored at the index cursor location.
  * @return error code. 0 if no error
  */
-RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid)
-{
-    return 0;
+RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid){
+	//First let's get the necessary details from the
+	//cursor that's provided to us
+	//Then we will load the leaf from the cursor
+
+	PageId cursorPID = cursor.pid;
+	int cursorEID = cursor.eid;
+
+	BTLeafNode leaf;
+	RC retVal = leaf.read(cursorPID,pf);
+
+	if(retVal!=0) {return retVal;}
+	
+	//We should also check the pid of the cursor 
+	//just to make sure that it's not some funky
+	//value
+
+	
+	//Need to increment the cursorEID
+	//Need to check that its not 
+	//greater than the key count
+
+	int max = leaf.getKeyCount();
+
+	if(cursorEID+1>=max){
+		cursorEID = 0;
+		cursorPID = leaf.getNextNodePtr();
+	}
+	else {cursorEID++;}
+
+	cursor.pid = cursorPID;
+	cursor.eid = cursorEID;
+	return 0;
+
 }
