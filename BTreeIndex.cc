@@ -270,18 +270,23 @@ RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid){
 	//Then we will load the leaf from the cursor
 
 	PageId cursorPID = cursor.pid;
+
+	if (cursorPID<0) {return RC_INVALID_CURSOR;}
 	int cursorEID = cursor.eid;
 
+	RC retVal;
+
 	BTLeafNode leaf;
-	RC retVal = leaf.read(cursorPID,pf);
+	retVal = leaf.read(cursorPID,pf);
 
 	if(retVal!=0) {return retVal;}
 	
-	//We should also check the pid of the cursor 
-	//just to make sure that it's not some funky
-	//value
+	//What we need to do is to reconfirm that we are able
+	//To read the entry 
 
-	
+	retVal = leaf.readEntry(cursorEID,key,rid);
+	if(retVal!=0) {return retVal;}
+
 	//Need to increment the cursorEID
 	//Need to check that its not 
 	//greater than the key count
