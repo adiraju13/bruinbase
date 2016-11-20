@@ -229,6 +229,22 @@ RC BTLeafNode::setNextNodePtr(PageId pid)
 	return 0;
 }
 
+void BTLeafNode::printLeaf()
+{
+	cout << "||";
+	for (int i = 0; i < getKeyCount(); i++)
+	{
+		int key;
+		RecordId rid;
+		memcpy(&key, buffer + (i * size_of_element), sizeof(int));
+		memcpy(&rid, buffer + sizeof(int) + (i * size_of_element), sizeof(RecordId));
+
+		cout << "Key: " << key << " ";
+
+	}
+	cout << "||" <<endl;
+}
+
 /*************************************************************************
 **************************************************************************
 **************************************************************************
@@ -496,4 +512,17 @@ RC BTNonLeafNode::initializeRoot(PageId pid1, int key, PageId pid2){
 	if(retValue!=0) {return retValue;}
 
 	return 0;
+}
+
+void BTNonLeafNode::printNonLeafNode()
+{
+	cout << "||";
+	for (int i = 0; i < getKeyCount(); i++){
+		int key; 
+
+		memcpy(&key, buffer + 8 + (i*sizeof(PageId)*sizeof(int)),sizeof(int));
+		cout << "Key: " << key << " ";
+
+	}
+	cout << "||" << endl;
 }
