@@ -34,6 +34,7 @@ typedef struct {
 class BTreeIndex {
  public:
   BTreeIndex();
+  void printTree();
 
   /**
    * Open the index file in read or write mode.

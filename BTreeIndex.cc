@@ -10,6 +10,13 @@
 #include "BTreeIndex.h"
 #include "BTreeNode.h"
 
+#include <iostream>       // std::cout
+#include <queue>          // std::queue
+
+#include <stdlib.h>
+#include <cstring>
+
+
 using namespace std;
 
 /*
@@ -43,7 +50,7 @@ RC BTreeIndex::open(const string& indexname, char mode){
  	//Write an empty root node (which is a leaf node)
 	if(pf.endPid() <= 0) { 
 		BTLeafNode leaf;
-		int t = lead.write(rootPid,pf);
+		int t = leaf.write(rootPid,pf);
 	}
 
 	return 0;
@@ -128,6 +135,8 @@ RC BTreeIndex::insertHelper(int key, const RecordId& rid, int level, PageId curr
 			BTNonLeafNode root;
 
 			int err;
+			cout << currPage << endl;
+			cout << pidPointer << endl;
 			err = root.initializeRoot(currPage, nextKey, pidPointer);
 			if (err != 0)return err;
 
@@ -303,4 +312,79 @@ RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid){
 	cursor.eid = cursorEID;
 	return 0;
 
+}
+
+void BTreeIndex::printTree()
+{
+	if (treeHeight <= 0) return;
+	
+	if (treeHeight == 1){
+		BTLeafNode node;
+		node.read(rootPid, pf);
+		node.printLeaf();
+		return;
+	}
+	else{
+
+		BTNonLeafNode root;
+		root.read(rootPid, pf);
+		int level = 1;
+
+		cout << "Level "<< level << endl;
+		root.printNonLeafNode();
+
+		queue<PageId>current;
+		queue<PageId>children;
+		PageId first;
+		memcpy(&first, root.buffer, sizeof(PageId));
+		children.push(first);
+
+		for (int i = 0; i < root.getKeyCount(); i++){
+			PageId add;
+			memcpy(&add, root.buffer + 8 + (i*(sizeof(int) + sizeof(PageId))) + sizeof(int), sizeof(PageId));
+			children.push(add);
+		}
+
+		current = queue<PageId>(children);
+		children = queue<PageId>();
+
+		level++;
+		
+		while(level <= treeHeight){
+			cout << "Level " << level  << endl;
+			if (level == treeHeight){
+				while (!current.empty()){
+					PageId pid = current.front();
+					BTLeafNode n;
+					n.read(pid, pf);
+					n.printLeaf();
+					current.pop();
+				}
+			}
+			else{
+				while(!current.empty())
+				{
+					PageId pid = current.front();
+					BTNonLeafNode root; 
+					root.read(pid, pf);
+					root.printNonLeafNode();
+
+					PageId first;
+					memcpy(&first, root.buffer, sizeof(PageId));
+					children.push(first);
+
+					for (int i = 0; i < root.getKeyCount(); i++){
+						PageId add;
+						memcpy(&add, root.buffer + 8 + (i*(sizeof(int) + sizeof(PageId))) + sizeof(int), sizeof(PageId));
+						children.push(add);
+					}
+					current.pop();
+				}
+			}
+			level++;
+			current = queue<PageId>(children);
+			children = queue<PageId>();
+		}
+		
+	}
 }

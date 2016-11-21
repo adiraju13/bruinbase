@@ -121,8 +121,9 @@ class BTLeafNode {
  */
 class BTNonLeafNode {
   public:
+    char buffer[PageFile::PAGE_SIZE];
     BTNonLeafNode();
-    void printNonLeaf();
+    void printNonLeafNode();
    /**
     * Insert a (key, pid) pair to the node.
     * Remember that all keys inside a B+tree node should be kept sorted.
@@ -193,7 +194,6 @@ class BTNonLeafNode {
     * that contains the node.
     */
     int numKeys;
-    char buffer[PageFile::PAGE_SIZE];
 }; 
 
 #endif /* BTREENODE_H */

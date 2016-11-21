@@ -31,7 +31,12 @@ void BTLeafNode::setNumKeys(int nKeys)
 RC BTLeafNode::read(PageId pid, const PageFile& pf)
 {
 	//using PageFile API to read the page into the buffer
-	return pf.read(pid, buffer); 
+	int err = pf.read(pid, buffer); 
+	if (err != 0) return err;
+
+	memcpy(&numKeys, buffer, sizeof(int));
+	return 0;
+
 }
 /*
  * Write the content of the node to the page pid in the PageFile pf.
@@ -43,6 +48,7 @@ RC BTLeafNode::read(PageId pid, const PageFile& pf)
 RC BTLeafNode::write(PageId pid, PageFile& pf)
 {	
 	//using the PageFile to write into the page from the buffer 
+	memcpy(buffer, &numKeys, sizeof(int));
 	return pf.write(pid, buffer); 
 }
 
@@ -63,11 +69,11 @@ int BTLeafNode::getKeyCount()
  */
 RC BTLeafNode::insert(int key, const RecordId& rid){
 	//check if there is space for the node?
-	if (size_of_page - size_of_pageID - (numKeys * size_of_element) < size_of_element){
+	if (size_of_page - size_of_pageID - (numKeys * size_of_element) - sizeof(int) < size_of_element){
 		return RC_NODE_FULL;
 	}
 
-	int byteOffset = 0;
+	int byteOffset = sizeof(int);
 	for (int i = 0; i < numKeys; i++){
 		int currKeyValue;
 		memcpy(&currKeyValue, buffer + byteOffset, sizeof(int));
@@ -111,7 +117,7 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 		return RC_INVALID_ATTRIBUTE;
 
 	//space to put the node
-	if (size_of_page - size_of_pageID - (numKeys * size_of_element) >= size_of_element){
+	if (size_of_page - size_of_pageID - (numKeys * size_of_element) - sizeof(int) >= size_of_element){
 		return RC_INVALID_ATTRIBUTE;
 	}
 
@@ -125,10 +131,10 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 
 	if (index >= numKeys/2){
 		insertFirstHalf = false;
-		numKeysInFirst = index + 1;
+		numKeysInFirst = numKeys/2 + 1;
 	}else{
 		insertFirstHalf = true;
-		numKeysInFirst = index;
+		numKeysInFirst = numKeys/2;
 	}
 	numKeysInSecond = numKeys - numKeysInFirst;
 
@@ -136,8 +142,11 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 	memset(sibling.buffer, 0, size_of_page);
 
 	//split the current buffer
-	memcpy(sibling.buffer, buffer + (numKeysInFirst * size_of_element), numKeysInSecond * size_of_element);
-	memset(buffer + (numKeysInFirst * size_of_element), 0, (numKeysInSecond * size_of_element) - sizeof(PageId));
+	memcpy(sibling.buffer + sizeof(int), buffer + sizeof(int) + (numKeysInFirst * size_of_element), numKeysInSecond * size_of_element);
+	
+
+	memset(buffer + sizeof(int) + (numKeysInFirst * size_of_element), 0, (numKeysInSecond * size_of_element) - sizeof(PageId));
+
 
 	setNumKeys(numKeysInFirst);
 	sibling.setNumKeys(numKeysInSecond);
@@ -150,6 +159,8 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 	else{
 		sibling.insert(key, rid);
 	}
+
+	memcpy(&siblingKey, sibling.buffer + sizeof(int), sizeof(int));
 
 	return 0; 
 }
@@ -173,7 +184,7 @@ RC BTLeafNode::locate(int searchKey, int& eid)
 	} 
 	int leafKey = 0;
 	for (int i = 0; i < numKeys; i++){
-		memcpy(&leafKey, buffer + (i*size_of_element), sizeof(int));
+		memcpy(&leafKey, buffer + sizeof(int) + (i*size_of_element), sizeof(int));
 		if (leafKey == searchKey){
 			eid = i;
 			return 0;
@@ -199,8 +210,8 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 	if (eid < 0 || eid >= numKeys){
 		return RC_NO_SUCH_RECORD;
 	}
-	memcpy(&key, buffer + (eid * size_of_element), sizeof(int));
-	memcpy(&rid, buffer + (eid * size_of_element) + sizeof(int), sizeof(RecordId));
+	memcpy(&key, buffer + sizeof(int) + (eid * size_of_element), sizeof(int));
+	memcpy(&rid, buffer + sizeof(int) + (eid * size_of_element) + sizeof(int), sizeof(RecordId));
 	return 0; 
 }
 
@@ -236,15 +247,18 @@ void BTLeafNode::printLeaf()
 	{
 		int key;
 		RecordId rid;
-		memcpy(&key, buffer + (i * size_of_element), sizeof(int));
-		memcpy(&rid, buffer + sizeof(int) + (i * size_of_element), sizeof(RecordId));
+		memcpy(&key, buffer + sizeof(int) + (i * size_of_element), sizeof(int));
+		memcpy(&rid, buffer + (2*sizeof(int)) + (i * size_of_element), sizeof(RecordId));
 
 		cout << "Key: " << key << " ";
 
 	}
 	cout << "||" <<endl;
 }
-
+void BTLeafNode::printSize()
+{
+	cout << "size: " <<getKeyCount() << endl;
+}
 /*************************************************************************
 **************************************************************************
 **************************************************************************
@@ -264,7 +278,10 @@ BTNonLeafNode::BTNonLeafNode() {
  * @return 0 if successful. Return an error code if there is an error.
  */
 RC BTNonLeafNode::read(PageId pid, const PageFile& pf){
-	return pf.read(pid,buffer); //Using PageFile function to read from specific page
+	int err = pf.read(pid,buffer); //Using PageFile function to read from specific page
+	if (err != 0) return err;
+	memcpy (&numKeys, buffer + 4, sizeof(int));
+	return 0;
 }
     
 /*
@@ -274,6 +291,7 @@ RC BTNonLeafNode::read(PageId pid, const PageFile& pf){
  * @return 0 if successful. Return an error code if there is an error.
  */
 RC BTNonLeafNode::write(PageId pid, PageFile& pf){
+	memcpy(buffer+4, &numKeys, sizeof(int));
 	return pf.write(pid,buffer); //Using PageFile function to write to specific page
 }
 
@@ -520,7 +538,7 @@ void BTNonLeafNode::printNonLeafNode()
 	for (int i = 0; i < getKeyCount(); i++){
 		int key; 
 
-		memcpy(&key, buffer + 8 + (i*sizeof(PageId)*sizeof(int)),sizeof(int));
+		memcpy(&key, buffer + 8 + (i*(sizeof(PageId)+sizeof(int))),sizeof(int));
 		cout << "Key: " << key << " ";
 
 	}
