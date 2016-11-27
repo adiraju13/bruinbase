@@ -151,18 +151,52 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
     return RC_FILE_OPEN_FAILED;
   }
 
+  //At this point, if there has been no error
+  //Then that means the table is able to be openned
+
+  //If index is true, then Bruinbase will create
+  //The corresponding B+ tree index on the key column
+  //Of the table
+
+  //Index file should be named 'tblname.idx'
+
+  BTreeIndex bti;
+
   string line;
   int key; 
   string value;
 
   RecordId rid;
 
-  while(getline(infile, line)){
+  if(index==true) {
+    bti.open(table + ".idx",'w');
+
+    //Once opened, we need to get each line
+    //And start inseting each pair into the BTree
+
+    while(getline(infile,line)) {
+      parseLoadLine(line,key,value);
+      
+      if(rf.append(key,value,rid)!=0) {return RC_FILE_WRITE_FAILED;}
+
+      //At this point, if there has been no error -> then it's ready to insert the pair
+      //Will need to insert pair of key and rid into BTree
+
+      if(bti.insert(key,rid)!=0){return RC_FILE_WRITE_FAILED;}
+    }
+
+    bti.close(); //Closes the index tree & file
+  }
+
+  else {
+    while(getline(infile, line)){
     parseLoadLine(line, key, value);
     rf.append(key, value, rid);
+    }
   }
 
   if (rf.close()!=0) return -1002; //close failed;
+  infile.close();
 
   return 0;
 }
